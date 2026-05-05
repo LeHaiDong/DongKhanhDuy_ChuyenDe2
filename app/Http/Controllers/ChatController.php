@@ -104,7 +104,7 @@ class ChatController extends Controller
                         }
                     }
                 } catch (\Throwable $exception) {
-                    report($exception);
+                    // Dịch vụ NLP Python là tùy chọn; nếu không chạy, chatbot vẫn trả lời bằng kịch bản Laravel.
                 }
             }
 
@@ -130,7 +130,7 @@ class ChatController extends Controller
                         $aiResponse = $data['choices'][0]['message']['content'] ?? null;
                     }
                 } catch (\Throwable $exception) {
-                    report($exception);
+                    // API AI bên ngoài là tùy chọn; lỗi mạng không được làm gián đoạn chatbot bán hàng.
                 }
             }
 
@@ -408,27 +408,6 @@ class ChatController extends Controller
         }
 
         return $cleanContext;
-
-        $context = "THÔNG TIN SẢN PHẨM ĐANG CÓ:\n";
-
-        foreach ($products as $product) {
-            $context .= "- {$product->name} ({$product->brand})\n";
-            $context .= "  + Loại: {$product->display_product_type}\n";
-
-            foreach ($product->display_specifications as $spec) {
-                $context .= "  + {$spec['label']}: {$spec['value']}\n";
-            }
-
-            if ($product->categories->isNotEmpty()) {
-                $context .= "  + Danh mục: {$product->categories->pluck('display_name')->implode(', ')}\n";
-            }
-
-            $context .= "  + Giá: {$product->formatted_price}\n";
-            $context .= "  + Link: " . route('products.show', $product->id) . "\n";
-            $context .= "  + Còn hàng: " . ($product->in_stock ? 'Có' : 'Hết hàng') . "\n\n";
-        }
-
-        return $context;
     }
 
     private function buildSystemPrompt(string $productContext): string
@@ -444,18 +423,6 @@ class ChatController extends Controller
         }
 
         return $cleanPrompt;
-        $prompt = "Bạn là trợ lý bán hàng của một shop đa ngành. "
-            . "Bạn phải trả lời hoàn toàn bằng tiếng Việt có dấu, dễ đọc, ngắn gọn và sát nhu cầu mua hàng. "
-            . "Bạn có thể tư vấn điện thoại, máy tính bảng, tai nghe, loa, sạc, pin dự phòng, sữa, ngũ cốc, snack, khẩu trang, mẹ và bé, gia dụng, văn phòng phẩm. "
-            . "Khi có sản phẩm phù hợp trong catalog, hãy ưu tiên giới thiệu đúng sản phẩm đó và chèn link markdown dạng [Tên sản phẩm](link). "
-            . "Nếu người dùng hỏi về giao hàng, thanh toán, bảo hành, đổi trả hoặc mua nhanh, hãy trả lời như một nhân viên bán hàng thực tế.";
-
-        if ($productContext !== '') {
-            $prompt .= "\n\n" . $productContext;
-            $prompt .= "Nếu không có sản phẩm khớp hoàn toàn, hãy đề xuất lựa chọn gần nhất và giải thích ngắn vì sao phù hợp.";
-        }
-
-        return $prompt;
     }
 
     private function buildScriptedReply(string $message, $products): ?string
@@ -524,42 +491,6 @@ class ChatController extends Controller
         $normalized = $this->expandCatalogAliases($this->normalizeVietnamese($message));
 
         return $this->buildCleanCatalogFallbackReply($normalized, $products);
-
-        $lines = [];
-
-        if (str_contains($normalized, 'giao hang') || str_contains($normalized, 'ship')) {
-            $lines[] = 'Shop hỗ trợ giao hàng toàn quốc. Sau khi bạn chốt đơn, hệ thống sẽ lưu đơn để bên shop xác nhận và giao hàng.';
-        } elseif (str_contains($normalized, 'thanh toan') || str_contains($normalized, 'cod') || str_contains($normalized, 'chuyen khoan')) {
-            $lines[] = 'Hiện shop hỗ trợ thanh toán khi nhận hàng (COD) và chuyển khoản ngân hàng.';
-        } elseif (str_contains($normalized, 'bao hanh')) {
-            $lines[] = 'Tùy nhóm hàng, shop sẽ có chính sách bảo hành hoặc hỗ trợ đổi lỗi phù hợp.';
-        } elseif (str_contains($normalized, 'doi tra') || str_contains($normalized, 'hoan tien')) {
-            $lines[] = 'Nếu sản phẩm lỗi hoặc không đúng mô tả, bạn có thể liên hệ shop để được hỗ trợ đổi trả.';
-        } else {
-            $lines[] = 'Mình đã lọc nhanh một vài sản phẩm phù hợp để bạn tham khảo.';
-        }
-
-        if ($products->isEmpty()) {
-            $lines[] = 'Hiện mình chưa thấy sản phẩm nào khớp thật sát. Bạn thử nói rõ hơn về nhóm hàng, thương hiệu hoặc mức giá mong muốn nhé.';
-
-            return implode("\n", $lines);
-        }
-
-        $lines[] = 'Gợi ý nhanh cho bạn:';
-
-        foreach ($products->take(3) as $product) {
-            $lines[] = "- [{$product->name}](" . route('products.show', $product->id) . ") - {$product->display_product_type}, {$product->formatted_price}, " . ($product->in_stock ? 'còn hàng' : 'tạm hết hàng');
-        }
-
-        if (str_contains($normalized, 'so sanh') || str_contains($normalized, 'nen chon')) {
-            $lines[] = 'Bạn có thể nói thêm ngân sách hoặc mục đích sử dụng để mình so sánh và chốt lựa chọn tốt hơn.';
-        } elseif (str_contains($normalized, 'mua') || str_contains($normalized, 'dat hang')) {
-            $lines[] = 'Bạn có thể bấm Thêm vào giỏ hoặc Mua ngay ngay trên sản phẩm để đặt hàng nhanh.';
-        } else {
-            $lines[] = 'Nếu bạn muốn, hãy nói rõ thêm ngân sách, thương hiệu hoặc mục đích sử dụng để mình lọc sát hơn.';
-        }
-
-        return implode("\n", $lines);
     }
 
     private function buildCleanCatalogFallbackReply(string $normalized, $products): string

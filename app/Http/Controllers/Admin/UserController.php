@@ -12,7 +12,9 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::query()->where('is_admin', false);
+        $query = User::query()
+            ->where('is_admin', false)
+            ->whereDoesntHave('sellerShop');
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -30,8 +32,11 @@ class UserController extends Controller
         $users = $query->orderBy($sortBy, $sortOrder)->paginate(15);
 
         $stats = [
-            'total_customers' => User::where('is_admin', false)->count(),
+            'total_customers' => User::where('is_admin', false)
+                ->whereDoesntHave('sellerShop')
+                ->count(),
             'new_this_week' => User::where('is_admin', false)
+                ->whereDoesntHave('sellerShop')
                 ->where('created_at', '>=', now()->subDays(7))
                 ->count(),
         ];
@@ -194,6 +199,7 @@ class UserController extends Controller
 
         $userIds = User::whereIn('id', $request->user_ids)
             ->where('is_admin', false)
+            ->whereDoesntHave('sellerShop')
             ->pluck('id')
             ->all();
 
@@ -209,7 +215,10 @@ class UserController extends Controller
             }
         }
 
-        User::whereIn('id', $userIds)->where('is_admin', false)->delete();
+        User::whereIn('id', $userIds)
+            ->where('is_admin', false)
+            ->whereDoesntHave('sellerShop')
+            ->delete();
 
         return redirect()
             ->back()
@@ -218,6 +227,6 @@ class UserController extends Controller
 
     private function abortIfNotCustomer(User $user): void
     {
-        abort_if($user->is_admin, 404);
+        abort_if($user->is_admin || $user->sellerShop()->exists(), 404);
     }
 }

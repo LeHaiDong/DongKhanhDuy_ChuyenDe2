@@ -425,7 +425,7 @@ function handleCartAction(button, redirectToCheckout) {
     button.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 10px;"></i>Đang xử lý...';
     button.disabled = true;
 
-    fetch('/cart/add', {
+    fetch(redirectToCheckout ? '/cart/buy-now' : '/cart/add', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -443,13 +443,12 @@ function handleCartAction(button, redirectToCheckout) {
             return;
         }
 
-        updateCartCount(data.cart_count);
-
         if (redirectToCheckout) {
-            window.location.href = '/cart/checkout';
+            window.location.href = data.redirect_url || '/cart/checkout';
             return;
         }
 
+        updateCartCount(data.cart_count);
         button.innerHTML = '<i class="fas fa-check" style="margin-right: 10px;"></i>Đã thêm';
         button.style.background = '#16a34a';
         createNotification('Đã thêm sản phẩm vào giỏ hàng.', 'success');

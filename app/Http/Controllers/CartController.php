@@ -15,9 +15,13 @@ use Illuminate\Validation\ValidationException;
 class CartController extends Controller
 {
     private const SESSION_COUPON_KEY = 'checkout_coupon_code';
+    private const SESSION_DIRECT_CHECKOUT_KEY = 'direct_checkout_cart_id';
 
     public function index()
     {
+        $this->deleteDirectCheckoutItems();
+        $this->forgetDirectCheckout();
+
         $cartItems = $this->getCartItems();
         $total = (float) $cartItems->sum('total_price');
         $cartCount = (int) $cartItems->sum('quantity');
@@ -27,6 +31,13 @@ class CartController extends Controller
 
     public function add(Request $request)
     {
+        if ($request->boolean('buy_now')) {
+            return $this->buyNow($request);
+        }
+
+        $this->deleteDirectCheckoutItems();
+        $this->forgetDirectCheckout();
+
         $request->validate([
             'camera_lens_id' => 'required|exists:camera_lenses,id',
             'quantity' => 'required|integer|min:1|max:10',
@@ -60,6 +71,7 @@ class CartController extends Controller
         }
 
         $existingItem = Cart::where('camera_lens_id', $request->camera_lens_id)
+            ->where('is_direct_checkout', false)
             ->where(function ($query) {
                 if (Auth::check()) {
                     $query->where('user_id', Auth::id());
@@ -92,22 +104,80 @@ class CartController extends Controller
                 'camera_lens_id' => $request->camera_lens_id,
                 'quantity' => $request->quantity,
                 'unit_price' => $cameraLens->price,
+                'is_direct_checkout' => false,
             ]);
         }
 
         if (!$wantsJson) {
-            if ($request->boolean('buy_now')) {
-                return redirect()
-                    ->route('cart.checkout')
-                    ->with('success', 'Đã thêm sản phẩm, bạn có thể kiểm tra thông tin thanh toán.');
-            }
-
             return back()->with('success', 'Đã thêm sản phẩm vào giỏ hàng.');
         }
 
         return response()->json([
             'success' => true,
             'message' => 'Đã thêm sản phẩm vào giỏ hàng.',
+            'cart_count' => Cart::getCartCount(Auth::id(), session()->getId()),
+        ]);
+    }
+
+    public function buyNow(Request $request)
+    {
+        $request->validate([
+            'camera_lens_id' => 'required|exists:camera_lenses,id',
+            'quantity' => 'required|integer|min:1|max:10',
+        ]);
+
+        $wantsJson = $request->expectsJson() || $request->ajax() || $request->isJson();
+        $cameraLens = CameraLens::findOrFail($request->camera_lens_id);
+
+        if ($this->currentUserOwnsProductShop($cameraLens)) {
+            $message = 'Bạn đang đăng nhập bằng tài khoản chủ shop nên không thể tự mua sản phẩm của chính shop. Hãy đăng xuất và đăng nhập tài khoản khách hàng để đặt mua.';
+
+            if (!$wantsJson) {
+                return back()->with('error', $message);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+            ], 422);
+        }
+
+        if ($cameraLens->stock_quantity < $request->quantity) {
+            $message = 'Sản phẩm trong kho không đủ số lượng bạn chọn.';
+
+            if (!$wantsJson) {
+                return back()->with('error', $message);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+            ]);
+        }
+
+        $this->deleteDirectCheckoutItems();
+
+        $directItem = Cart::create([
+            'user_id' => Auth::id(),
+            'session_id' => Auth::check() ? null : session()->getId(),
+            'camera_lens_id' => $request->camera_lens_id,
+            'quantity' => $request->quantity,
+            'unit_price' => $cameraLens->price,
+            'is_direct_checkout' => true,
+        ]);
+
+        session([self::SESSION_DIRECT_CHECKOUT_KEY => $directItem->id]);
+
+        if (!$wantsJson) {
+            return redirect()
+                ->route('cart.checkout')
+                ->with('success', 'Bạn đang thanh toán nhanh sản phẩm đã chọn.');
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đang chuyển sang thanh toán nhanh.',
+            'redirect_url' => route('cart.checkout'),
             'cart_count' => Cart::getCartCount(Auth::id(), session()->getId()),
         ]);
     }
@@ -182,6 +252,7 @@ class CartController extends Controller
 
         $query->delete();
         $this->forgetCoupon();
+        $this->forgetDirectCheckout();
 
         return response()->json([
             'success' => true,
@@ -205,7 +276,7 @@ class CartController extends Controller
                 ->with('error', 'Vui lòng đăng nhập để tiếp tục thanh toán.');
         }
 
-        $cartItems = $this->getCartItems();
+        $cartItems = $this->getCheckoutItems();
 
         if ($cartItems->isEmpty()) {
             $this->forgetCoupon();
@@ -253,7 +324,7 @@ class CartController extends Controller
             'coupon_code' => 'required|string|max:50',
         ]);
 
-        $cartItems = $this->getCartItems();
+        $cartItems = $this->getCheckoutItems();
 
         if ($cartItems->isEmpty()) {
             return redirect()
@@ -304,7 +375,7 @@ class CartController extends Controller
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        $cartItems = $this->getCartItems();
+        $cartItems = $this->getCheckoutItems();
 
         if ($cartItems->isEmpty()) {
             return redirect()->route('cart.index')->with('error', 'Giỏ hàng đang trống.');
@@ -425,7 +496,7 @@ class CartController extends Controller
             return $order->fresh();
         });
 
-        $this->clearCart();
+        $this->clearCheckoutItems();
         $this->forgetCoupon();
 
         return redirect()
@@ -436,6 +507,23 @@ class CartController extends Controller
     private function getCartItems()
     {
         return Cart::getCartItems(Auth::id(), session()->getId());
+    }
+
+    private function getCheckoutItems()
+    {
+        $directCheckoutId = session(self::SESSION_DIRECT_CHECKOUT_KEY);
+
+        if ($directCheckoutId) {
+            $directItems = Cart::getCartItems(Auth::id(), session()->getId(), true, (int) $directCheckoutId);
+
+            if ($directItems->isNotEmpty()) {
+                return $directItems;
+            }
+
+            $this->forgetDirectCheckout();
+        }
+
+        return $this->getCartItems();
     }
 
     private function getAvailableCoupons($cartItems, float $orderTotal)
@@ -558,9 +646,39 @@ class CartController extends Controller
         $query->delete();
     }
 
+    private function clearCheckoutItems(): void
+    {
+        if (session()->has(self::SESSION_DIRECT_CHECKOUT_KEY)) {
+            $this->deleteDirectCheckoutItems();
+            $this->forgetDirectCheckout();
+
+            return;
+        }
+
+        $this->clearCart();
+    }
+
     private function forgetCoupon(): void
     {
         session()->forget(self::SESSION_COUPON_KEY);
+    }
+
+    private function forgetDirectCheckout(): void
+    {
+        session()->forget(self::SESSION_DIRECT_CHECKOUT_KEY);
+    }
+
+    private function deleteDirectCheckoutItems(): void
+    {
+        $query = Cart::where('is_direct_checkout', true);
+
+        if (Auth::check()) {
+            $query->where('user_id', Auth::id());
+        } else {
+            $query->where('session_id', session()->getId());
+        }
+
+        $query->delete();
     }
 
     private function currentUserOwnsProductShop(CameraLens $product): bool

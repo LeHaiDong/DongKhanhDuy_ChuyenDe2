@@ -113,11 +113,10 @@
                                 Thêm vào giỏ
                             </button>
                         </form>
-                        <form action="{{ route('cart.add') }}" method="POST" style="flex: 1;" onclick="event.stopPropagation();">
+                        <form action="{{ route('cart.buy-now') }}" method="POST" style="flex: 1;" onclick="event.stopPropagation();">
                             @csrf
                             <input type="hidden" name="camera_lens_id" value="{{ $lens->id }}">
                             <input type="hidden" name="quantity" value="1">
-                            <input type="hidden" name="buy_now" value="1">
                             <button type="submit"
                                     style="width: 100%; background: #1d4ed8; color: white; border: none; padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer;">
                                 <i class="fas fa-bolt" style="margin-right: 8px;"></i>
@@ -200,7 +199,7 @@ function quickAddToCart(lensId) {
 }
 
 function buyNowFromGrid(lensId) {
-    fetch('/cart/add', {
+    fetch('/cart/buy-now', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -214,8 +213,7 @@ function buyNowFromGrid(lensId) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            updateCartCount(data.cart_count);
-            window.location.href = '/cart/checkout';
+            window.location.href = data.redirect_url || '/cart/checkout';
         } else {
             createNotification(data.message, 'error');
         }

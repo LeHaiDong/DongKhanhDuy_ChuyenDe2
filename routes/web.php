@@ -56,6 +56,7 @@ Route::prefix('cart')->name('cart.')->group(function () {
     Route::get('/count', [CartController::class, 'count'])->name('count');
     Route::get('/', [CartController::class, 'index'])->name('index');
     Route::post('/add', [CartController::class, 'add'])->name('add');
+    Route::post('/buy-now', [CartController::class, 'buyNow'])->name('buy-now');
     Route::patch('/update/{cart}', [CartController::class, 'update'])->name('update');
     Route::delete('/remove/{cart}', [CartController::class, 'remove'])->name('remove');
     Route::delete('/clear', [CartController::class, 'clear'])->name('clear');
@@ -160,10 +161,10 @@ Route::prefix('admin')->middleware(['admin'])->group(function () {
     Route::post('/users/{user}/toggle-status', [App\Http\Controllers\Admin\UserController::class, 'toggleStatus'])->name('admin.users.toggle-status');
     Route::post('/users/bulk-action', [App\Http\Controllers\Admin\UserController::class, 'bulkAction'])->name('admin.users.bulk-action');
 
-    Route::get('/favorites', [App\Http\Controllers\Admin\FavoriteController::class, 'index'])->name('admin.favorites.index');
-    Route::delete('/favorites/{favorite}', [App\Http\Controllers\Admin\FavoriteController::class, 'destroy'])->name('admin.favorites.destroy');
-    Route::get('/favorites/analytics', [App\Http\Controllers\Admin\FavoriteController::class, 'analytics'])->name('admin.favorites.analytics');
-    Route::get('/favorites/export', [App\Http\Controllers\Admin\FavoriteController::class, 'export'])->name('admin.favorites.export');
+    Route::redirect('/favorites', '/admin/dashboard')->name('admin.favorites.index');
+    Route::redirect('/favorites/analytics', '/admin/dashboard')->name('admin.favorites.analytics');
+    Route::redirect('/favorites/export', '/admin/dashboard')->name('admin.favorites.export');
+    Route::delete('/favorites/{favorite}', fn () => redirect()->route('admin.dashboard'))->name('admin.favorites.destroy');
 
     Route::resource('categories', App\Http\Controllers\Admin\CategoryController::class)->names([
         'index' => 'admin.categories.index',
@@ -197,20 +198,16 @@ Route::prefix('admin')->middleware(['admin'])->group(function () {
     Route::post('/seller-shops/{sellerShop}/approve', [App\Http\Controllers\Admin\SellerShopController::class, 'approve'])->name('admin.seller-shops.approve');
     Route::post('/seller-shops/{sellerShop}/reject', [App\Http\Controllers\Admin\SellerShopController::class, 'reject'])->name('admin.seller-shops.reject');
 
-    Route::redirect('/camera-lenses', '/admin/products');
-    Route::redirect('/camera-lenses/create', '/admin/products/create');
+    Route::redirect('/camera-lenses', '/admin/dashboard');
+    Route::redirect('/camera-lenses/create', '/admin/dashboard');
     Route::get('/camera-lenses/{camera_lense}/edit', function ($camera_lense) {
-        return redirect()->route('admin.products.edit', ['product' => $camera_lense]);
+        return redirect()->route('admin.dashboard');
     });
 
-    Route::resource('products', ProductController::class)
-        ->except(['show'])
-        ->names([
-            'index' => 'admin.products.index',
-            'create' => 'admin.products.create',
-            'store' => 'admin.products.store',
-            'edit' => 'admin.products.edit',
-            'update' => 'admin.products.update',
-            'destroy' => 'admin.products.destroy',
-        ]);
+    Route::redirect('/products', '/admin/dashboard')->name('admin.products.index');
+    Route::redirect('/products/create', '/admin/dashboard')->name('admin.products.create');
+    Route::post('/products', fn () => redirect()->route('admin.dashboard'))->name('admin.products.store');
+    Route::get('/products/{product}/edit', fn () => redirect()->route('admin.dashboard'))->name('admin.products.edit');
+    Route::match(['put', 'patch'], '/products/{product}', fn () => redirect()->route('admin.dashboard'))->name('admin.products.update');
+    Route::delete('/products/{product}', fn () => redirect()->route('admin.dashboard'))->name('admin.products.destroy');
 });

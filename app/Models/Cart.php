@@ -14,12 +14,14 @@ class Cart extends Model
         'user_id',
         'camera_lens_id',
         'quantity',
-        'unit_price'
+        'unit_price',
+        'is_direct_checkout',
     ];
 
     protected $casts = [
         'unit_price' => 'integer',
-        'quantity' => 'integer'
+        'quantity' => 'integer',
+        'is_direct_checkout' => 'boolean',
     ];
 
     // Relationships
@@ -68,7 +70,7 @@ class Cart extends Model
     }
 
     // Static methods
-    public static function getCartItems($userId = null, $sessionId = null)
+    public static function getCartItems($userId = null, $sessionId = null, bool $includeDirectCheckout = false, ?int $directCheckoutId = null)
     {
         $query = self::with('cameraLens')->active();
 
@@ -76,6 +78,12 @@ class Cart extends Model
             $query->forUser($userId);
         } elseif ($sessionId) {
             $query->forSession($sessionId);
+        }
+
+        if ($directCheckoutId) {
+            $query->whereKey($directCheckoutId)->where('is_direct_checkout', true);
+        } elseif (!$includeDirectCheckout) {
+            $query->where('is_direct_checkout', false);
         }
 
         return $query->get();
@@ -96,6 +104,8 @@ class Cart extends Model
         } elseif ($sessionId) {
             $query->forSession($sessionId);
         }
+
+        $query->where('is_direct_checkout', false);
 
         return $query->sum('quantity');
     }

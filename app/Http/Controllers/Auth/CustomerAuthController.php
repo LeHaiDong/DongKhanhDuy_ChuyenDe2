@@ -53,8 +53,18 @@ class CustomerAuthController extends Controller
                 continue;
             }
 
+            if ($sessionItem->is_direct_checkout) {
+                $sessionItem->update([
+                    'user_id' => $user->id,
+                    'session_id' => null,
+                ]);
+
+                continue;
+            }
+
             $existingItem = Cart::where('user_id', $user->id)
                 ->where('camera_lens_id', $sessionItem->camera_lens_id)
+                ->where('is_direct_checkout', false)
                 ->first();
 
             if ($existingItem) {
