@@ -4,6 +4,36 @@
 
 @section('content')
 @php
+    $bankAccounts = [
+        [
+            'code' => 'VCB',
+            'bank' => 'Vietcombank',
+            'account_number' => '1234567890',
+            'account_name' => 'MIENTAYSHOP',
+            'branch' => 'Chi nhánh Cần Thơ',
+            'status' => 'Đã liên kết',
+            'last4' => '7890',
+        ],
+        [
+            'code' => 'MB',
+            'bank' => 'MB Bank',
+            'account_number' => '9090123456',
+            'account_name' => 'MIENTAYSHOP',
+            'branch' => 'Chi nhánh TP. Hồ Chí Minh',
+            'status' => 'Khả dụng',
+            'last4' => '3456',
+        ],
+        [
+            'code' => 'ACB',
+            'bank' => 'ACB',
+            'account_number' => '1688990011',
+            'account_name' => 'MIENTAYSHOP',
+            'branch' => 'Chi nhánh Bình Dương',
+            'status' => 'Khả dụng',
+            'last4' => '0011',
+        ],
+    ];
+
     $bankAccount = [
         'bank' => 'Vietcombank',
         'account_number' => '1234567890',
@@ -11,6 +41,8 @@
         'branch' => 'Chi nhánh Cần Thơ',
     ];
     $bankTransferContent = 'MTS-' . auth()->id() . '-' . now()->format('dmHi');
+    $bankQrUrl = 'https://img.vietqr.io/image/VCB-' . $bankAccount['account_number'] . '-compact2.png?amount=' .
+        (int) $finalTotal . '&addInfo=' . urlencode($bankTransferContent) . '&accountName=' . urlencode($bankAccount['account_name']);
 @endphp
 
 <div class="min-h-screen py-8" style="background: linear-gradient(180deg, #edf5ff 0%, #f8fbff 42%, #ffffff 100%);">
@@ -126,8 +158,11 @@
                     <div class="bg-white rounded-2xl shadow-sm p-6">
                         <h2 class="text-xl font-semibold text-gray-900 mb-6">Phương thức thanh toán</h2>
 
+                        <input type="hidden" name="payment_channel" id="payment_channel" value="linked_vcb">
+                        <input type="hidden" name="payment_bank_code" id="payment_bank_code" value="VCB">
+
                         <div class="space-y-4">
-                            <label class="flex items-start p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-colors">
+                            <label class="payment-card flex items-start p-4 border border-gray-200 rounded-2xl cursor-pointer hover:border-blue-500 transition-colors">
                                 <input
                                     type="radio"
                                     name="payment_method"
@@ -140,11 +175,11 @@
                                         <span class="font-medium text-gray-900">Thanh toán khi nhận hàng (COD)</span>
                                         <i class="fas fa-truck ml-2 text-green-600"></i>
                                     </div>
-                                    <p class="text-sm text-gray-600 mt-1">Thanh toán bằng tiền mặt khi nhận hàng.</p>
+                                    <p class="text-sm text-gray-600 mt-1">Thanh toán bằng tiền mặt khi nhận hàng. Phù hợp nếu bạn muốn kiểm tra hàng trước.</p>
                                 </div>
                             </label>
 
-                            <label class="flex items-start p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-500 transition-colors">
+                            <label class="payment-card flex items-start p-4 border border-gray-200 rounded-2xl cursor-pointer hover:border-blue-500 transition-colors">
                                 <input
                                     type="radio"
                                     name="payment_method"
@@ -153,53 +188,104 @@
                                 >
                                 <div class="ml-3 flex-1">
                                     <div class="flex items-center">
-                                        <span class="font-medium text-gray-900">Chuyển khoản ngân hàng</span>
+                                        <span class="font-medium text-gray-900">Thanh toán qua ngân hàng liên kết</span>
                                         <i class="fas fa-university ml-2 text-blue-600"></i>
+                                        <span class="ml-2 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 border border-blue-100">
+                                            NAPAS 247
+                                        </span>
                                     </div>
-                                    <p class="text-sm text-gray-600 mt-1">Tạo đơn trước, sau đó chuyển khoản theo đúng nội dung bên dưới để người bán đối chiếu nhanh.</p>
-                                    <div class="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-slate-700 bank-info hidden">
-                                        <div class="flex items-start justify-between gap-4 mb-4">
+                                    <p class="text-sm text-gray-600 mt-1">Chọn ngân hàng/ví liên kết, quét QR hoặc sao chép thông tin chuyển khoản để người bán đối chiếu nhanh.</p>
+
+                                    <div class="mt-4 rounded-3xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-cyan-50 p-4 text-sm text-slate-700 bank-info hidden">
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
                                             <div>
-                                                <strong class="block text-slate-900 text-base">Thông tin chuyển khoản</strong>
-                                                <span class="text-slate-600">Người bán sẽ xác nhận thanh toán trong kênh bán sau khi nhận tiền.</span>
+                                                <strong class="block text-slate-900 text-base">Liên kết ngân hàng & thanh toán nhanh</strong>
+                                                <span class="text-slate-600">MienTayShop mô phỏng cổng thanh toán như sàn thương mại: chọn nguồn tiền, tạo mã giao dịch rồi người bán xác nhận trong kênh bán.</span>
                                             </div>
-                                            <span class="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-bold text-sky-700 border border-sky-200">
-                                                Ưu tiên xử lý nhanh
+                                            <span class="inline-flex w-max items-center rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-700 border border-blue-200">
+                                                <i class="fas fa-shield-alt mr-1"></i> Bảo mật mô phỏng
                                             </span>
                                         </div>
 
-                                        <div class="grid gap-3">
-                                            <div class="flex items-center justify-between gap-3 rounded-xl bg-white p-3 border border-sky-100">
-                                                <span class="text-slate-500">Ngân hàng</span>
-                                                <strong class="text-slate-900">{{ $bankAccount['bank'] }}</strong>
+                                        <div class="grid grid-cols-2 gap-2 mb-4">
+                                            <button type="button" class="payment-channel-option rounded-2xl border-2 border-blue-600 bg-white p-3 text-left shadow-sm" data-channel="linked_vcb" data-bank="VCB">
+                                                <span class="block text-xs font-bold uppercase tracking-wide text-blue-700">Đã liên kết</span>
+                                                <strong class="block text-slate-900">Vietcombank •••• {{ $bankAccounts[0]['last4'] }}</strong>
+                                                <span class="text-xs text-slate-500">Trừ tiền sau khi xác nhận</span>
+                                            </button>
+                                            <button type="button" class="payment-channel-option rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-blue-400" data-channel="napas_atm" data-bank="NAPAS">
+                                                <span class="block text-xs font-bold uppercase tracking-wide text-orange-600">Thẻ ATM</span>
+                                                <strong class="block text-slate-900">ATM nội địa / NAPAS</strong>
+                                                <span class="text-xs text-slate-500">Liên kết ngân hàng mới</span>
+                                            </button>
+                                            <button type="button" class="payment-channel-option rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-blue-400" data-channel="qr_transfer" data-bank="VCB">
+                                                <span class="block text-xs font-bold uppercase tracking-wide text-emerald-600">Quét mã</span>
+                                                <strong class="block text-slate-900">QR chuyển khoản</strong>
+                                                <span class="text-xs text-slate-500">Mở app ngân hàng để quét</span>
+                                            </button>
+                                            <button type="button" class="payment-channel-option rounded-2xl border border-slate-200 bg-white p-3 text-left hover:border-blue-400" data-channel="momo_wallet" data-bank="MOMO">
+                                                <span class="block text-xs font-bold uppercase tracking-wide text-pink-600">Ví điện tử</span>
+                                                <strong class="block text-slate-900">MoMo / Ví liên kết</strong>
+                                                <span class="text-xs text-slate-500">Thanh toán qua ví mô phỏng</span>
+                                            </button>
+                                        </div>
+
+                                        <div class="grid gap-4 lg:grid-cols-5">
+                                            <div class="lg:col-span-2 rounded-2xl bg-white p-4 border border-blue-100 text-center">
+                                                <div class="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 mb-3">
+                                                    QR ngân hàng
+                                                </div>
+                                                <img
+                                                    src="{{ $bankQrUrl }}"
+                                                    alt="QR chuyển khoản MienTayShop"
+                                                    class="mx-auto h-44 w-44 rounded-2xl border border-slate-100 bg-white object-contain p-2"
+                                                    loading="lazy"
+                                                >
+                                                <p class="mt-3 text-xs text-slate-500">Quét bằng app ngân hàng, nội dung đã gắn mã đơn để shop đối chiếu.</p>
                                             </div>
-                                            <div class="flex items-center justify-between gap-3 rounded-xl bg-white p-3 border border-sky-100">
-                                                <span class="text-slate-500">Số tài khoản</span>
-                                                <span class="inline-flex items-center gap-2">
-                                                    <strong class="text-slate-900">{{ $bankAccount['account_number'] }}</strong>
-                                                    <button type="button" class="copy-bank-value text-sky-700 font-bold" data-copy="{{ $bankAccount['account_number'] }}">Sao chép</button>
-                                                </span>
-                                            </div>
-                                            <div class="flex items-center justify-between gap-3 rounded-xl bg-white p-3 border border-sky-100">
-                                                <span class="text-slate-500">Chủ tài khoản</span>
-                                                <strong class="text-slate-900">{{ $bankAccount['account_name'] }}</strong>
-                                            </div>
-                                            <div class="flex items-center justify-between gap-3 rounded-xl bg-white p-3 border border-sky-100">
-                                                <span class="text-slate-500">Số tiền</span>
-                                                <strong class="text-blue-700">{{ number_format($finalTotal, 0, ',', '.') }} VNĐ</strong>
-                                            </div>
-                                            <div class="rounded-xl bg-white p-3 border border-sky-100">
-                                                <span class="block text-slate-500 mb-1">Nội dung chuyển khoản</span>
-                                                <div class="flex items-center justify-between gap-3">
-                                                    <strong class="text-slate-900">{{ $bankTransferContent }}</strong>
-                                                    <button type="button" class="copy-bank-value text-sky-700 font-bold" data-copy="{{ $bankTransferContent }}">Sao chép</button>
+
+                                            <div class="lg:col-span-3 grid gap-3">
+                                                @foreach($bankAccounts as $account)
+                                                    <div class="flex items-center justify-between gap-3 rounded-2xl bg-white p-3 border border-blue-100">
+                                                        <div class="flex items-center gap-3">
+                                                            <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-xs font-black text-white">{{ $account['code'] }}</span>
+                                                            <div>
+                                                                <strong class="block text-slate-900">{{ $account['bank'] }}</strong>
+                                                                <span class="text-xs text-slate-500">{{ $account['status'] }} • {{ $account['branch'] }}</span>
+                                                            </div>
+                                                        </div>
+                                                        <button type="button" class="copy-bank-value rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700" data-copy="{{ $account['account_number'] }}">
+                                                            Sao chép STK
+                                                        </button>
+                                                    </div>
+                                                @endforeach
+
+                                                <div class="rounded-2xl bg-white p-3 border border-blue-100">
+                                                    <div class="flex items-center justify-between gap-3">
+                                                        <span class="text-slate-500">Chủ tài khoản</span>
+                                                        <strong class="text-slate-900">{{ $bankAccount['account_name'] }}</strong>
+                                                    </div>
+                                                </div>
+                                                <div class="rounded-2xl bg-white p-3 border border-blue-100">
+                                                    <div class="flex items-center justify-between gap-3">
+                                                        <span class="text-slate-500">Số tiền cần thanh toán</span>
+                                                        <strong class="text-blue-700">{{ number_format($finalTotal, 0, ',', '.') }} VNĐ</strong>
+                                                    </div>
+                                                </div>
+                                                <div class="rounded-2xl bg-white p-3 border border-blue-100">
+                                                    <span class="block text-slate-500 mb-1">Nội dung chuyển khoản</span>
+                                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                        <strong class="text-slate-900">{{ $bankTransferContent }}</strong>
+                                                        <button type="button" class="copy-bank-value rounded-full bg-blue-600 px-4 py-2 text-xs font-bold text-white" data-copy="{{ $bankTransferContent }}">Sao chép nội dung</button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <p class="mt-4 text-xs leading-6 text-slate-600">
-                                            Sau khi bấm “Đặt hàng ngay”, đơn sẽ ở trạng thái chờ xác nhận. Nếu bạn chọn chuyển khoản, người bán sẽ kiểm tra giao dịch và đánh dấu đã thanh toán trong kênh bán.
-                                        </p>
+                                        <div class="mt-4 grid gap-2 rounded-2xl bg-white/80 p-3 text-xs leading-6 text-slate-600 border border-blue-100">
+                                            <p><strong class="text-slate-900">Quy trình:</strong> bấm “Đặt hàng ngay” để tạo đơn, chuyển khoản đúng số tiền/nội dung, sau đó người bán xác nhận thanh toán trong kênh bán.</p>
+                                            <p><strong class="text-slate-900">Lưu ý:</strong> đây là mô phỏng liên kết ngân hàng cho bài nộp, chưa trừ tiền thật như cổng thanh toán thương mại.</p>
+                                        </div>
                                     </div>
                                 </div>
                             </label>
@@ -409,15 +495,50 @@ document.addEventListener('DOMContentLoaded', function () {
     const bankTransferRadio = document.querySelector('input[value="bank_transfer"]');
     const codRadio = document.querySelector('input[value="cod"]');
     const bankInfo = document.querySelector('.bank-info');
+    const paymentCards = document.querySelectorAll('.payment-card');
+    const paymentChannelInput = document.getElementById('payment_channel');
+    const paymentBankCodeInput = document.getElementById('payment_bank_code');
 
     function toggleBankInfo() {
         if (bankInfo && bankTransferRadio) {
             bankInfo.classList.toggle('hidden', !bankTransferRadio.checked);
         }
+
+        paymentCards.forEach(card => {
+            const radio = card.querySelector('input[type="radio"]');
+            const isChecked = radio?.checked;
+            card.classList.toggle('border-blue-500', isChecked);
+            card.classList.toggle('bg-blue-50', isChecked);
+            card.classList.toggle('shadow-sm', isChecked);
+        });
     }
 
     bankTransferRadio?.addEventListener('change', toggleBankInfo);
     codRadio?.addEventListener('change', toggleBankInfo);
+
+    document.querySelectorAll('.payment-channel-option').forEach(button => {
+        button.addEventListener('click', function () {
+            bankTransferRadio.checked = true;
+
+            document.querySelectorAll('.payment-channel-option').forEach(item => {
+                item.classList.remove('border-blue-600', 'shadow-sm');
+                item.classList.add('border-slate-200');
+            });
+
+            this.classList.remove('border-slate-200');
+            this.classList.add('border-blue-600', 'shadow-sm');
+
+            if (paymentChannelInput) {
+                paymentChannelInput.value = this.dataset.channel || '';
+            }
+
+            if (paymentBankCodeInput) {
+                paymentBankCodeInput.value = this.dataset.bank || '';
+            }
+
+            toggleBankInfo();
+        });
+    });
 
     document.querySelectorAll('.copy-bank-value').forEach(button => {
         button.addEventListener('click', async function () {

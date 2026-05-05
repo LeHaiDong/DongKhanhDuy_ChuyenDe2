@@ -299,6 +299,8 @@ class CartController extends Controller
             'customer_address' => 'required|string|max:500',
             'payment_method' => 'required|in:cod,bank_transfer',
             'payment_reference' => 'nullable|string|max:100',
+            'payment_channel' => 'nullable|string|in:linked_vcb,napas_atm,qr_transfer,momo_wallet',
+            'payment_bank_code' => 'nullable|string|max:30',
             'notes' => 'nullable|string|max:1000',
         ]);
 
@@ -321,8 +323,26 @@ class CartController extends Controller
 
         $coupon = $couponState['coupon'] ?? null;
         $discountAmount = (float) ($couponState['discount_amount'] ?? 0);
+        $paymentChannelLabels = [
+            'linked_vcb' => 'Vietcombank đã liên kết',
+            'napas_atm' => 'Thẻ ATM nội địa / NAPAS',
+            'qr_transfer' => 'QR chuyển khoản ngân hàng',
+            'momo_wallet' => 'Ví điện tử MoMo / ví liên kết',
+        ];
+        $paymentChannel = $request->payment_method === 'bank_transfer'
+            ? $request->input('payment_channel', 'linked_vcb')
+            : null;
+        $paymentBankCode = $request->payment_method === 'bank_transfer'
+            ? strtoupper((string) $request->input('payment_bank_code', 'VCB'))
+            : null;
+        $paymentNotes = $request->notes;
 
-        $order = DB::transaction(function () use ($request, $cartItems, $subtotal, $coupon, $discountAmount) {
+        if ($paymentChannel) {
+            $paymentLabel = $paymentChannelLabels[$paymentChannel] ?? 'Ngân hàng liên kết';
+            $paymentNotes = trim(($paymentNotes ? $paymentNotes . "\n" : '') . "Kênh thanh toán khách chọn: {$paymentLabel}" . ($paymentBankCode ? " ({$paymentBankCode})" : ''));
+        }
+
+        $order = DB::transaction(function () use ($request, $cartItems, $subtotal, $coupon, $discountAmount, $paymentChannel, $paymentBankCode, $paymentNotes) {
             $products = CameraLens::whereIn('id', $cartItems->pluck('camera_lens_id'))
                 ->lockForUpdate()
                 ->get()
@@ -374,7 +394,13 @@ class CartController extends Controller
                 'discount_amount' => $discountAmount,
                 'coupon_code' => $coupon?->code,
                 'total_amount' => max($subtotal - $discountAmount, 0),
-                'notes' => $request->notes,
+                'notes' => $paymentNotes,
+                'tracking_info' => $paymentChannel
+                    ? [
+                        'payment_channel' => $paymentChannel,
+                        'payment_bank_code' => $paymentBankCode,
+                    ]
+                    : null,
             ]);
 
             foreach ($cartItems as $item) {
