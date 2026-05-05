@@ -58,8 +58,48 @@ class SellerController extends Controller
             ->latest()
             ->take(6)
             ->get();
+        $chartStart = now()->subDays(13)->startOfDay();
+        $dailyRevenueRows = (clone $orderItemsQuery)
+            ->where('order_items.created_at', '>=', $chartStart)
+            ->whereHas('order', fn ($query) => $query->where('status', '!=', 'cancelled'))
+            ->selectRaw('DATE(order_items.created_at) as sale_date, SUM(final_price) as revenue, SUM(quantity) as sold_quantity')
+            ->groupBy('sale_date')
+            ->get()
+            ->keyBy('sale_date');
+        $chartData = collect(range(13, 0))->map(function ($daysAgo) use ($dailyRevenueRows) {
+            $date = now()->subDays($daysAgo);
+            $row = $dailyRevenueRows->get($date->toDateString());
 
-        return view('seller.dashboard', compact('shop', 'stats', 'latestProducts', 'latestOrders'));
+            return [
+                'date' => $date->toDateString(),
+                'label' => $date->format('d/m'),
+                'revenue' => (float) ($row->revenue ?? 0),
+                'sold_quantity' => (int) ($row->sold_quantity ?? 0),
+            ];
+        });
+        $chartMaxRevenue = max(1, (float) $chartData->max('revenue'));
+        $bestProducts = (clone $orderItemsQuery)
+            ->whereHas('order', fn ($query) => $query->where('status', '!=', 'cancelled'))
+            ->selectRaw('camera_lens_id, product_name, product_brand, SUM(quantity) as sold_quantity, SUM(final_price) as revenue')
+            ->groupBy('camera_lens_id', 'product_name', 'product_brand')
+            ->orderByDesc('revenue')
+            ->take(5)
+            ->get();
+        $orderStatusStats = (clone $ordersQuery)
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return view('seller.dashboard', compact(
+            'shop',
+            'stats',
+            'latestProducts',
+            'latestOrders',
+            'chartData',
+            'chartMaxRevenue',
+            'bestProducts',
+            'orderStatusStats'
+        ));
     }
 
     public function apply(Request $request)

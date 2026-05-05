@@ -8,52 +8,154 @@
 @section('content')
 @php
     $orderStatusLabels = [
-        'pending' => 'Chờ người bán xác nhận',
+        'pending' => 'Chờ xác nhận',
         'confirmed' => 'Đã xác nhận',
         'processing' => 'Đang chuẩn bị',
         'shipped' => 'Đang giao',
         'delivered' => 'Đã giao',
         'cancelled' => 'Đã hủy',
     ];
+    $operatingRate = $stats['products'] > 0 ? round(($stats['active_products'] / $stats['products']) * 100) : 0;
+    $averageOrderValue = $stats['orders'] > 0 ? $stats['gross_revenue'] / $stats['orders'] : 0;
+    $latestRevenue = $chartData->sum('revenue');
 @endphp
-<div class="seller-shell">
-    <section class="seller-card">
-        <div class="seller-card-head">
-            <div>
-                <h1>Kênh bán {{ $shop->shop_name }}</h1>
-                <p>Shop đã được admin phê duyệt. Khu vực này dành riêng cho người bán quản lý sản phẩm, đơn hàng và doanh thu.</p>
-            </div>
-            <div class="seller-actions" style="margin-top: 0;">
+
+<div class="seller-shell seller-dashboard">
+    <section class="seller-dashboard-hero">
+        <div class="seller-hero-copy">
+            <span class="seller-kicker"><i class="fas fa-store"></i> Trung tâm người bán</span>
+            <h1>{{ $shop->shop_name }}</h1>
+            <p>
+                Theo dõi doanh thu, xử lý đơn hàng và quản lý sản phẩm của shop trên cùng một bảng điều khiển.
+                Các đơn hàng bên dưới chỉ tính phần sản phẩm thuộc kênh bán của bạn.
+            </p>
+
+            <div class="seller-actions seller-hero-actions">
                 <a href="{{ route('seller.products.create') }}" class="seller-btn primary"><i class="fas fa-plus"></i> Đăng sản phẩm</a>
-                <a href="{{ route('seller.orders.index') }}" class="seller-btn outline"><i class="fas fa-receipt"></i> Đơn hàng</a>
-                <a href="{{ route('seller.products.index') }}" class="seller-btn outline"><i class="fas fa-boxes-stacked"></i> Sản phẩm</a>
+                <a href="{{ route('seller.orders.index') }}" class="seller-btn outline light"><i class="fas fa-receipt"></i> Xử lý đơn hàng</a>
+                <a href="{{ route('seller.products.index') }}" class="seller-btn outline light"><i class="fas fa-boxes-stacked"></i> Kho sản phẩm</a>
+            </div>
+
+            <div class="seller-hero-mini">
+                <div>
+                    <strong>{{ number_format($stats['gross_revenue'], 0, ',', '.') }} VNĐ</strong>
+                    <span>Doanh thu ghi nhận</span>
+                </div>
+                <div>
+                    <strong>{{ number_format($stats['orders']) }}</strong>
+                    <span>Đơn có sản phẩm của shop</span>
+                </div>
+                <div>
+                    <strong>{{ $operatingRate }}%</strong>
+                    <span>Sản phẩm đang hiển thị</span>
+                </div>
             </div>
         </div>
 
-        <div class="seller-stats seller-stats-wide">
-            <div class="seller-stat highlight">
-                <strong>{{ number_format($stats['gross_revenue'], 0, ',', '.') }} VNĐ</strong>
-                <span>Doanh thu ghi nhận</span>
+        <div class="seller-chart-card hero-chart">
+            <div class="seller-chart-head">
+                <div>
+                    <span class="seller-card-label">14 ngày gần đây</span>
+                    <h2>Biểu đồ doanh thu</h2>
+                </div>
+                <strong>{{ number_format($latestRevenue, 0, ',', '.') }} VNĐ</strong>
             </div>
-            <div class="seller-stat">
-                <strong>{{ number_format($stats['paid_revenue'], 0, ',', '.') }} VNĐ</strong>
-                <span>Doanh thu đã thanh toán</span>
+
+            <div class="seller-chart-bars" aria-label="Biểu đồ doanh thu 14 ngày">
+                @foreach($chartData as $day)
+                    @php
+                        $barHeight = max(10, round(($day['revenue'] / $chartMaxRevenue) * 150));
+                    @endphp
+                    <div class="seller-chart-day" title="{{ $day['label'] }}: {{ number_format($day['revenue'], 0, ',', '.') }} VNĐ">
+                        <div class="seller-chart-track">
+                            <span style="height: {{ $barHeight }}px"></span>
+                        </div>
+                        <small>{{ $day['label'] }}</small>
+                    </div>
+                @endforeach
             </div>
-            <div class="seller-stat">
-                <strong>{{ number_format($stats['orders']) }}</strong>
-                <span>Đơn hàng có sản phẩm của shop</span>
+        </div>
+    </section>
+
+    <section class="seller-dashboard-grid">
+        <article class="seller-stat-card accent-blue">
+            <i class="fas fa-sack-dollar"></i>
+            <span>Doanh thu đã thanh toán</span>
+            <strong>{{ number_format($stats['paid_revenue'], 0, ',', '.') }} VNĐ</strong>
+            <small>Đơn đã được xác nhận thanh toán hoặc giao thành công.</small>
+        </article>
+
+        <article class="seller-stat-card accent-cyan">
+            <i class="fas fa-box-open"></i>
+            <span>Sản phẩm đang bán</span>
+            <strong>{{ number_format($stats['active_products']) }}/{{ number_format($stats['products']) }}</strong>
+            <small>Tổng tồn kho hiện tại: {{ number_format($stats['stock']) }} sản phẩm.</small>
+        </article>
+
+        <article class="seller-stat-card accent-amber">
+            <i class="fas fa-truck-fast"></i>
+            <span>Đơn cần theo dõi</span>
+            <strong>{{ number_format($stats['pending_orders']) }}</strong>
+            <small>Gồm đơn chờ xác nhận, đã xác nhận và đang chuẩn bị.</small>
+        </article>
+
+        <article class="seller-stat-card accent-violet">
+            <i class="fas fa-users"></i>
+            <span>Khách đã mua</span>
+            <strong>{{ number_format($stats['customers']) }}</strong>
+            <small>Giá trị trung bình mỗi đơn: {{ number_format($averageOrderValue, 0, ',', '.') }} VNĐ.</small>
+        </article>
+    </section>
+
+    <section class="seller-insight-grid">
+        <div class="seller-card seller-card-compact">
+            <div class="seller-card-head compact">
+                <div>
+                    <span class="seller-card-label">Sản phẩm nổi bật</span>
+                    <h2>Bán chạy theo doanh thu</h2>
+                </div>
+                <a href="{{ route('seller.products.index') }}" class="seller-link">Quản lý sản phẩm <i class="fas fa-arrow-right"></i></a>
             </div>
-            <div class="seller-stat">
-                <strong>{{ number_format($stats['pending_orders']) }}</strong>
-                <span>Đơn cần theo dõi</span>
+
+            @if($bestProducts->isNotEmpty())
+                <div class="seller-product-rank">
+                    @foreach($bestProducts as $index => $item)
+                        @php
+                            $maxBestRevenue = max(1, (float) $bestProducts->max('revenue'));
+                            $progress = max(8, round(((float) $item->revenue / $maxBestRevenue) * 100));
+                        @endphp
+                        <div class="seller-rank-item">
+                            <span class="seller-rank-number">{{ $index + 1 }}</span>
+                            <div>
+                                <strong>{{ $item->product_name }}</strong>
+                                <small>{{ $item->product_brand ?: $shop->brand_name }} · Đã bán {{ number_format($item->sold_quantity) }}</small>
+                                <div class="seller-progress"><span style="width: {{ $progress }}%"></span></div>
+                            </div>
+                            <b>{{ number_format($item->revenue, 0, ',', '.') }} VNĐ</b>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <div class="seller-empty small">Chưa có doanh thu để xếp hạng sản phẩm.</div>
+            @endif
+        </div>
+
+        <div class="seller-card seller-card-compact">
+            <div class="seller-card-head compact">
+                <div>
+                    <span class="seller-card-label">Vận hành đơn hàng</span>
+                    <h2>Tình trạng hiện tại</h2>
+                </div>
+                <a href="{{ route('seller.orders.index') }}" class="seller-link">Xem đơn <i class="fas fa-arrow-right"></i></a>
             </div>
-            <div class="seller-stat">
-                <strong>{{ number_format($stats['active_products']) }}/{{ number_format($stats['products']) }}</strong>
-                <span>Sản phẩm đang bán / tổng sản phẩm</span>
-            </div>
-            <div class="seller-stat">
-                <strong>{{ number_format($stats['customers']) }}</strong>
-                <span>Khách hàng đã mua</span>
+
+            <div class="seller-status-grid">
+                @foreach($orderStatusLabels as $status => $label)
+                    <div class="seller-status-tile {{ $status }}">
+                        <strong>{{ number_format((int) ($orderStatusStats[$status] ?? 0)) }}</strong>
+                        <span>{{ $label }}</span>
+                    </div>
+                @endforeach
             </div>
         </div>
     </section>
@@ -61,15 +163,16 @@
     <section class="seller-card">
         <div class="seller-card-head">
             <div>
+                <span class="seller-card-label">Đơn cần xử lý</span>
                 <h2>Đơn hàng gần đây</h2>
-                <p>Mỗi người bán chỉ thấy phần đơn hàng chứa sản phẩm thuộc shop của mình.</p>
+                <p>Mỗi người bán chỉ thấy phần đơn hàng có sản phẩm thuộc shop của mình.</p>
             </div>
             <a href="{{ route('seller.orders.index') }}" class="seller-btn outline">Xem tất cả đơn hàng</a>
         </div>
 
         @if($latestOrders->isNotEmpty())
             <div class="seller-table-wrap">
-                <table class="seller-table">
+                <table class="seller-table seller-table-modern">
                     <thead>
                         <tr>
                             <th>Mã đơn</th>
@@ -91,21 +194,21 @@
                                 <td><strong>{{ $order->order_number }}</strong></td>
                                 <td>
                                     <strong>{{ $order->shipping_name ?: $order->user?->name }}</strong>
-                                    <div style="color: #64748b; font-size: 13px;">{{ $order->shipping_phone }}</div>
+                                    <div class="seller-muted">{{ $order->shipping_phone }}</div>
                                 </td>
                                 <td>
                                     <strong>{{ number_format($sellerItems->sum('quantity')) }} sản phẩm</strong>
-                                    <div style="color: #64748b; font-size: 13px;">
+                                    <div class="seller-muted">
                                         {{ $sellerItems->pluck('product_name')->take(2)->implode(', ') }}
                                         @if($sellerItems->count() > 2)
                                             ...
                                         @endif
                                     </div>
                                 </td>
-                                <td><strong style="color: #2563eb;">{{ number_format($sellerRevenue, 0, ',', '.') }} VNĐ</strong></td>
-                                <td><span class="seller-status">{{ $orderStatusLabels[$order->status] ?? 'Đang cập nhật' }}</span></td>
+                                <td><strong class="seller-money">{{ number_format($sellerRevenue, 0, ',', '.') }} VNĐ</strong></td>
+                                <td><span class="seller-status {{ $order->status }}">{{ $orderStatusLabels[$order->status] ?? 'Đang cập nhật' }}</span></td>
                                 <td>{{ $order->created_at->format('d/m/Y H:i') }}</td>
-                                <td><a href="{{ route('seller.orders.show', $order) }}" class="seller-btn outline" style="min-height: 36px; padding: 8px 12px;">Xử lý</a></td>
+                                <td><a href="{{ route('seller.orders.show', $order) }}" class="seller-btn outline mini">Xử lý</a></td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -119,6 +222,7 @@
     <section class="seller-card">
         <div class="seller-card-head">
             <div>
+                <span class="seller-card-label">Kho hàng</span>
                 <h2>Sản phẩm mới nhất</h2>
                 <p>Người bán chịu trách nhiệm đăng, sửa, ẩn hoặc xóa sản phẩm của shop.</p>
             </div>
@@ -127,7 +231,7 @@
 
         @if($latestProducts->isNotEmpty())
             <div class="seller-table-wrap">
-                <table class="seller-table">
+                <table class="seller-table seller-table-modern">
                     <thead>
                         <tr>
                             <th>Ảnh</th>
@@ -145,13 +249,13 @@
                                 <td><img src="{{ $product->image_url }}" alt="{{ $product->name }}" class="seller-product-thumb" onerror="this.onerror=null;this.src='{{ $product->fallback_image_url }}';"></td>
                                 <td>
                                     <strong>{{ $product->name }}</strong>
-                                    <div style="color: #64748b; font-size: 13px;">{{ $product->brand }}</div>
+                                    <div class="seller-muted">{{ $product->brand }}</div>
                                 </td>
                                 <td>{{ $product->category_names ?: $product->display_product_type }}</td>
-                                <td><strong style="color: #2563eb;">{{ $product->formatted_price }}</strong></td>
+                                <td><strong class="seller-money">{{ $product->formatted_price }}</strong></td>
                                 <td>{{ $product->stock_quantity }}</td>
-                                <td><span class="seller-status {{ $product->is_active ? '' : 'muted' }}">{{ $product->is_active ? 'Đang bán' : 'Tạm ẩn' }}</span></td>
-                                <td><a href="{{ route('seller.products.edit', $product) }}" class="seller-btn outline" style="min-height: 36px; padding: 8px 12px;">Sửa</a></td>
+                                <td><span class="seller-status {{ $product->is_active ? 'delivered' : 'muted' }}">{{ $product->is_active ? 'Đang bán' : 'Tạm ẩn' }}</span></td>
+                                <td><a href="{{ route('seller.products.edit', $product) }}" class="seller-btn outline mini">Sửa</a></td>
                             </tr>
                         @endforeach
                     </tbody>
