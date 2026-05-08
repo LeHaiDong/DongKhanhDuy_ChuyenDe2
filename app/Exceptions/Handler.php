@@ -44,21 +44,28 @@ class Handler extends ExceptionHandler
      */
     public function register()
     {
-        $this->renderable(function (TokenMismatchException $e, $request) {
+        $this->reportable(function (Throwable $e) {
+            //
+        });
+    }
+
+    public function render($request, Throwable $e)
+    {
+        if ($e instanceof TokenMismatchException) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'message' => 'Phiên làm việc đã hết hạn. Vui lòng tải lại trang và thực hiện lại.',
                 ], 419);
             }
 
+            $target = $request->headers->get('referer') ?: route('auth.customer.login');
+
             return redirect()
-                ->back()
+                ->to($target)
                 ->withInput($request->except($this->dontFlash))
                 ->with('error', 'Phiên làm việc đã hết hạn. Vui lòng tải lại trang rồi gửi lại thông tin.');
-        });
+        }
 
-        $this->reportable(function (Throwable $e) {
-            //
-        });
+        return parent::render($request, $e);
     }
 }
