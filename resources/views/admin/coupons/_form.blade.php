@@ -1,6 +1,27 @@
 @php
     $startsAt = old('starts_at', optional($coupon->starts_at)->format('Y-m-d\TH:i'));
     $expiresAt = old('expires_at', optional($coupon->expires_at)->format('Y-m-d\TH:i'));
+
+    $formatDecimal = function (string $field, $value) {
+        $raw = old($field, $value);
+
+        if ($raw === null || $raw === '') {
+            return '';
+        }
+
+        if (is_string($raw)) {
+            $raw = trim($raw);
+            $normalized = str_replace([' ', ','], ['', '.'], $raw);
+
+            if (! is_numeric($normalized)) {
+                return $raw;
+            }
+
+            $raw = $normalized;
+        }
+
+        return rtrim(rtrim(number_format((float) $raw, 2, '.', ''), '0'), '.');
+    };
 @endphp
 
 @if($errors->any())
@@ -33,27 +54,55 @@
 
             <div class="form-group">
                 <label class="form-label" for="value">Giá trị giảm *</label>
-                <input id="value" name="value" type="number" min="1" step="1000" value="{{ old('value', $coupon->value) }}" class="form-control" required>
+                <input
+                    id="value"
+                    name="value"
+                    type="text"
+                    inputmode="decimal"
+                    value="{{ $formatDecimal('value', $coupon->value) }}"
+                    class="form-control"
+                    required
+                    data-decimal-input
+                    data-discount-value
+                >
+                <small id="valueHelp" style="display:block; margin-top:8px; color:#64748b; font-weight:700;"></small>
             </div>
 
             <div class="form-group">
                 <label class="form-label" for="minimum_amount">Đơn tối thiểu</label>
-                <input id="minimum_amount" name="minimum_amount" type="number" min="0" step="1000" value="{{ old('minimum_amount', $coupon->minimum_amount) }}" class="form-control">
+                <input
+                    id="minimum_amount"
+                    name="minimum_amount"
+                    type="text"
+                    inputmode="numeric"
+                    value="{{ $formatDecimal('minimum_amount', $coupon->minimum_amount) }}"
+                    class="form-control"
+                    data-decimal-input
+                >
             </div>
 
             <div class="form-group">
                 <label class="form-label" for="maximum_discount">Giảm tối đa</label>
-                <input id="maximum_discount" name="maximum_discount" type="number" min="0" step="1000" value="{{ old('maximum_discount', $coupon->maximum_discount) }}" class="form-control">
+                <input
+                    id="maximum_discount"
+                    name="maximum_discount"
+                    type="text"
+                    inputmode="numeric"
+                    value="{{ $formatDecimal('maximum_discount', $coupon->maximum_discount) }}"
+                    class="form-control"
+                    data-decimal-input
+                >
+                <small style="display:block; margin-top:8px; color:#64748b; font-weight:700;">Chỉ dùng khi voucher giảm theo phần trăm.</small>
             </div>
 
             <div class="form-group">
                 <label class="form-label" for="usage_limit">Tổng lượt dùng</label>
-                <input id="usage_limit" name="usage_limit" type="number" min="1" value="{{ old('usage_limit', $coupon->usage_limit) }}" class="form-control">
+                <input id="usage_limit" name="usage_limit" type="number" min="1" step="1" value="{{ old('usage_limit', $coupon->usage_limit) }}" class="form-control">
             </div>
 
             <div class="form-group">
                 <label class="form-label" for="usage_limit_per_user">Lượt dùng mỗi khách</label>
-                <input id="usage_limit_per_user" name="usage_limit_per_user" type="number" min="1" value="{{ old('usage_limit_per_user', $coupon->usage_limit_per_user) }}" class="form-control">
+                <input id="usage_limit_per_user" name="usage_limit_per_user" type="number" min="1" step="1" value="{{ old('usage_limit_per_user', $coupon->usage_limit_per_user) }}" class="form-control">
             </div>
 
             <div class="form-group">
@@ -102,19 +151,76 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const form = document.currentScript.closest('form');
     const typeSelect = document.getElementById('type');
+    const valueInput = document.getElementById('value');
+    const valueHelp = document.getElementById('valueHelp');
     const maxDiscount = document.getElementById('maximum_discount');
+    const decimalInputs = document.querySelectorAll('[data-decimal-input]');
 
-    function syncMaxDiscount() {
-        const isFixed = typeSelect.value === 'fixed';
-        maxDiscount.disabled = isFixed;
-        maxDiscount.closest('.form-group').style.opacity = isFixed ? '0.55' : '1';
-        if (isFixed) {
-            maxDiscount.value = '';
+    function normalizeNumber(raw) {
+        let value = String(raw || '').trim().replace(/\s/g, '');
+
+        if (!value) {
+            return '';
         }
+
+        const hasComma = value.includes(',');
+        const hasDot = value.includes('.');
+
+        if (hasComma && hasDot) {
+            value = value.replace(/\./g, '').replace(',', '.');
+        } else if (hasComma) {
+            value = value.replace(',', '.');
+        } else if (hasDot) {
+            const dotParts = value.split('.');
+
+            if (dotParts.length > 2 || (dotParts.length === 2 && dotParts[1].length === 3 && dotParts[0].length <= 3)) {
+                value = value.replace(/\./g, '');
+            }
+        }
+
+        return value;
     }
 
-    typeSelect.addEventListener('change', syncMaxDiscount);
-    syncMaxDiscount();
+    function syncDiscountFields() {
+        const isPercentage = typeSelect.value === 'percentage';
+
+        maxDiscount.disabled = !isPercentage;
+        maxDiscount.closest('.form-group').style.opacity = isPercentage ? '1' : '0.55';
+
+        if (!isPercentage) {
+            maxDiscount.value = '';
+            valueHelp.textContent = 'Nhập số tiền giảm theo VND, ví dụ 30000 là giảm 30.000 VNĐ.';
+            return;
+        }
+
+        valueHelp.textContent = 'Nhập số phần trăm từ 1 đến 100. Ví dụ 10 nghĩa là giảm 10%, không nhập 0.1.';
+    }
+
+    decimalInputs.forEach((input) => {
+        input.addEventListener('input', function () {
+            this.value = this.value.replace(/[^\d.,]/g, '');
+        });
+    });
+
+    form?.addEventListener('submit', function (event) {
+        decimalInputs.forEach((input) => {
+            input.value = normalizeNumber(input.value);
+        });
+
+        if (typeSelect.value === 'percentage') {
+            const discount = Number(valueInput.value);
+
+            if (!Number.isFinite(discount) || discount < 1 || discount > 100) {
+                event.preventDefault();
+                alert('Voucher giảm theo phần trăm chỉ được nhập từ 1 đến 100. Ví dụ: nhập 10 để giảm 10%.');
+                valueInput.focus();
+            }
+        }
+    });
+
+    typeSelect.addEventListener('change', syncDiscountFields);
+    syncDiscountFields();
 });
 </script>

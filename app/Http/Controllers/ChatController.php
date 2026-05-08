@@ -6,6 +6,7 @@ use App\Models\CameraLens;
 use App\Models\ChatEvent;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Models\Coupon;
 use App\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -47,7 +48,8 @@ class ChatController extends Controller
                 $relevantProducts = $this->findRelevantProducts($userMessage);
                 $productContext = $this->buildProductContext($relevantProducts);
                 $systemPrompt = $this->buildSystemPrompt($productContext);
-                $aiResponse = $this->buildScriptedReply($userMessage, $relevantProducts);
+                $aiResponse = $this->buildSmartLocalReply($userMessage, $relevantProducts)
+                    ?? $this->buildScriptedReply($userMessage, $relevantProducts);
             }
 
             if ($aiResponse === null && env('PY_CHAT_ENABLED', false) && filled(env('PY_CHAT_URL'))) {
@@ -135,7 +137,7 @@ class ChatController extends Controller
             }
 
             if ($aiResponse === null) {
-                $aiResponse = $this->buildCatalogFallbackReply($userMessage, $relevantProducts);
+                $aiResponse = $this->buildSmartFallbackReply($userMessage, $relevantProducts);
             }
 
             $aiChatMessage = ChatMessage::create([
@@ -423,6 +425,175 @@ class ChatController extends Controller
         }
 
         return $cleanPrompt;
+    }
+
+    private function buildSmartLocalReply(string $message, $products): ?string
+    {
+        $normalized = $this->expandCatalogAliases($this->normalizeVietnamese($message));
+
+        if ($this->containsAny($normalized, ['thoi tiet', 'troi hom nay', 'mua khong', 'nang khong'])) {
+            return 'Mình chưa xem được thời tiết trực tiếp theo vị trí của bạn. Nếu bạn mua đồ theo thời tiết thì mình có thể gợi ý khẩu trang, kem chống nắng, áo khoác, bình nước, ô dù hoặc đồ gia dụng tiện dùng trong ngày.';
+        }
+
+        if ($this->containsAny($normalized, ['voucher', 'vocher', 'ma giam gia', 'coupon', 'uu dai'])) {
+            $coupons = Coupon::available()->latest()->take(5)->get();
+
+            if ($coupons->isEmpty()) {
+                return 'Hiện shop chưa có voucher đang mở. Bạn vẫn có thể đặt hàng bình thường, phí vận chuyển đang được hiển thị ở trang thanh toán.';
+            }
+
+            return "Các voucher đang dùng được:\n" . $this->formatCouponLines($coupons)
+                . "\nBạn có thể nhập mã tại trang thanh toán, hệ thống sẽ tự kiểm tra điều kiện đơn tối thiểu.";
+        }
+
+        if ($this->containsAny($normalized, ['hot', 'ban chay', 'san pham dang hot', 'sale', 'giam gia hom nay'])) {
+            $hotProducts = CameraLens::active()
+                ->inStock()
+                ->orderByDesc('stock_quantity')
+                ->take(6)
+                ->get();
+
+            return "Một số sản phẩm nổi bật hiện có:\n" . $this->formatProductSuggestions($hotProducts)
+                . "\nBạn có thể bấm vào tên sản phẩm để xem chi tiết hoặc chọn Mua ngay trên thẻ sản phẩm.";
+        }
+
+        if ($this->containsAny($normalized, ['cach dat hang', 'dat hang nhu nao', 'huong dan dat hang', 'mua nhu nao'])) {
+            return "Cách đặt hàng trên MienTayShop:\n"
+                . "1. Tìm sản phẩm bằng thanh tìm kiếm hoặc danh mục.\n"
+                . "2. Chọn Thêm vào giỏ nếu muốn mua nhiều món, hoặc Mua ngay nếu muốn thanh toán một sản phẩm.\n"
+                . "3. Đăng nhập tài khoản khách hàng.\n"
+                . "4. Nhập địa chỉ nhận hàng, chọn voucher nếu có và phương thức thanh toán.\n"
+                . "5. Bấm Đặt hàng ngay. Sau đó đơn sẽ nằm trong Lịch sử mua hàng để bạn theo dõi trạng thái.";
+        }
+
+        if ($this->containsAny($normalized, ['thanh toan', 'chuyen khoan', 'ngan hang', 'cod', 'tra tien'])) {
+            return 'Shop hỗ trợ thanh toán khi nhận hàng (COD) và chuyển khoản ngân hàng. Với chuyển khoản, bạn tạo đơn trước, sau đó chuyển đúng số tiền, đúng nội dung mã đơn để người bán đối chiếu và xác nhận nhanh hơn.';
+        }
+
+        if ($this->containsAny($normalized, ['giao hang', 'ship', 'van chuyen', 'bao lau nhan'])) {
+            return 'Sau khi đặt hàng thành công, người bán sẽ xác nhận và cập nhật trạng thái đơn. Bạn có thể xem tiến trình trong Lịch sử mua hàng. Với bản demo này, phí vận chuyển đang được hiển thị trực tiếp ở trang thanh toán.';
+        }
+
+        if ($this->containsAny($normalized, ['doi tra', 'hoan tien', 'bao hanh', 'loi san pham'])) {
+            return 'Nếu sản phẩm lỗi, sai mô tả hoặc cần hỗ trợ đổi trả, bạn nên giữ thông tin đơn hàng và liên hệ shop bán sản phẩm đó. Người bán sẽ xử lý đơn, còn admin quản lý hệ thống và tài khoản người bán.';
+        }
+
+        if ($this->containsAny($normalized, ['dang ky ban hang', 'kenh nguoi ban', 'mo shop', 'ban hang tren shop'])) {
+            return 'Để mở kênh bán hàng, bạn vào Kênh người bán, gửi tên shop, thương hiệu, danh mục kinh doanh, giấy tờ cần thiết, mô tả và hình ảnh. Admin duyệt hồ sơ xong thì shop có thể đăng sản phẩm, quản lý đơn và theo dõi doanh thu.';
+        }
+
+        if ($this->containsAny($normalized, ['co tot khong', 'tot khong', 'danh gia', 'nen mua khong'])) {
+            if ($products->isNotEmpty()) {
+                $product = $products->first();
+                $rating = round((float) $product->approvedReviews()->avg('rating'), 1);
+                $count = $product->approvedReviews()->count();
+                $ratingText = $count > 0
+                    ? "Sản phẩm đang có {$rating}/5 điểm từ {$count} đánh giá đã duyệt."
+                    : 'Sản phẩm này chưa có nhiều đánh giá, bạn nên xem thêm thông tin chi tiết, giá và tồn kho trước khi mua.';
+
+                return "{$product->name} của {$product->brand} phù hợp nếu bạn đang tìm nhóm {$product->display_product_type}. {$ratingText}\n"
+                    . "Xem tại [" . $product->name . "](" . route('products.show', $product->id) . ").";
+            }
+
+            return 'Bạn muốn hỏi sản phẩm nào có tốt không? Hãy gửi tên sản phẩm hoặc thương hiệu, ví dụ “iPhone 15 có tốt không” hoặc “tai nghe Sony có tốt không”, mình sẽ lọc đúng sản phẩm để tư vấn.';
+        }
+
+        if ($products->isNotEmpty() && $this->looksLikeProductRequest($normalized)) {
+            $budget = $this->extractBudgetLimit($normalized);
+
+            if ($budget !== null) {
+                $filteredProducts = $products->filter(fn ($product) => (float) $product->price <= $budget)->values();
+                $products = $filteredProducts->isNotEmpty() ? $filteredProducts : $products;
+            }
+
+            return "Mình tìm thấy các sản phẩm phù hợp:\n" . $this->formatProductSuggestions($products)
+                . "\nNếu muốn lọc kỹ hơn, bạn có thể nói thêm ngân sách, thương hiệu hoặc nhu cầu sử dụng.";
+        }
+
+        return null;
+    }
+
+    private function buildSmartFallbackReply(string $message, $products): string
+    {
+        if ($this->isGreetingMessage($message)) {
+            return $this->buildGreetingReply();
+        }
+
+        if ($products->isNotEmpty()) {
+            return "Mình đã lọc được vài sản phẩm gần với yêu cầu của bạn:\n"
+                . $this->formatProductSuggestions($products)
+                . "\nBạn có thể nói rõ hơn tên sản phẩm, mức giá hoặc thương hiệu để mình gợi ý sát hơn.";
+        }
+
+        return 'Mình chưa tìm thấy sản phẩm thật khớp với câu hỏi này. Bạn hãy gửi tên sản phẩm, thương hiệu hoặc danh mục cụ thể hơn, ví dụ “iPhone 15”, “sữa cho bé”, “tai nghe Sony”, “khẩu trang 3M” hoặc “bánh kẹo dưới 100 nghìn”.';
+    }
+
+    private function containsAny(string $text, array $terms): bool
+    {
+        foreach ($terms as $term) {
+            if (str_contains($text, $term)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function looksLikeProductRequest(string $normalized): bool
+    {
+        return $this->containsAny($normalized, [
+            'tim', 'kiem', 'mua', 'san pham', 'goi y', 'co ban', 'co hang',
+            'dien thoai', 'iphone', 'samsung', 'tai nghe', 'sua', 'banh', 'keo',
+            'khau trang', 'gia dung', 'ao', 'giay', 'laptop', 'may tinh', 'dong ho',
+            'sach', 'my pham', 'son', 'kem', 'bim', 'ta', 'me va be',
+        ]);
+    }
+
+    private function extractBudgetLimit(string $normalized): ?float
+    {
+        if (! preg_match('/(?:duoi|nho hon|tam|khoang)?\s*(\d+(?:[\.,]\d+)?)\s*(trieu|tr|k|nghin|ngan|d|vnd)?/u', $normalized, $matches)) {
+            return null;
+        }
+
+        $amount = (float) str_replace(',', '.', $matches[1]);
+        $unit = $matches[2] ?? '';
+
+        if (in_array($unit, ['trieu', 'tr'], true)) {
+            return $amount * 1000000;
+        }
+
+        if (in_array($unit, ['k', 'nghin', 'ngan'], true)) {
+            return $amount * 1000;
+        }
+
+        return $amount > 1000 ? $amount : null;
+    }
+
+    private function formatProductSuggestions($products): string
+    {
+        if ($products->isEmpty()) {
+            return '- Hiện chưa có sản phẩm phù hợp để gợi ý.';
+        }
+
+        return $products->take(5)->map(function ($product) {
+            $stockText = $product->in_stock ? 'còn hàng' : 'tạm hết hàng';
+
+            return "- [{$product->name}](" . route('products.show', $product->id) . ") - {$product->brand}, {$product->formatted_price}, {$stockText}";
+        })->implode("\n");
+    }
+
+    private function formatCouponLines($coupons): string
+    {
+        return $coupons->map(function (Coupon $coupon) {
+            $value = $coupon->type === Coupon::TYPE_PERCENTAGE
+                ? rtrim(rtrim(number_format((float) $coupon->value, 2, ',', '.'), '0'), ',') . '%'
+                : number_format((float) $coupon->value, 0, ',', '.') . ' VNĐ';
+            $minimum = $coupon->minimum_amount
+                ? 'đơn từ ' . number_format((float) $coupon->minimum_amount, 0, ',', '.') . ' VNĐ'
+                : 'không yêu cầu đơn tối thiểu';
+
+            return "- {$coupon->code}: {$coupon->name} ({$value}, {$minimum})";
+        })->implode("\n");
     }
 
     private function buildScriptedReply(string $message, $products): ?string

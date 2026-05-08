@@ -108,7 +108,9 @@ class CouponController extends Controller
 
     private function validatedData(Request $request, ?Coupon $coupon = null): array
     {
-        $data = $request->validate([
+        $this->normalizeNumberInputs($request);
+
+        $rules = [
             'code' => [
                 'required',
                 'string',
@@ -128,6 +130,18 @@ class CouponController extends Controller
             'first_order_only' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
             'admin_notes' => ['nullable', 'string', 'max:1000'],
+        ];
+
+        if ($request->input('type') === Coupon::TYPE_PERCENTAGE) {
+            $rules['value'][] = 'max:100';
+        }
+
+        $data = $request->validate($rules, [
+            'value.max' => 'Voucher giảm theo phần trăm chỉ được nhập từ 1 đến 100. Ví dụ: nhập 10 để giảm 10%.',
+            'value.min' => 'Giá trị giảm phải lớn hơn hoặc bằng 1.',
+            'value.numeric' => 'Giá trị giảm chỉ được nhập số.',
+            'minimum_amount.numeric' => 'Đơn tối thiểu chỉ được nhập số.',
+            'maximum_discount.numeric' => 'Giảm tối đa chỉ được nhập số.',
         ]);
 
         $data['code'] = strtoupper(trim($data['code']));
@@ -139,5 +153,46 @@ class CouponController extends Controller
         }
 
         return $data;
+    }
+
+    private function normalizeNumberInputs(Request $request): void
+    {
+        foreach (['value', 'minimum_amount', 'maximum_discount'] as $field) {
+            if ($request->has($field)) {
+                $request->merge([
+                    $field => $this->normalizeNumberInput($request->input($field)),
+                ]);
+            }
+        }
+    }
+
+    private function normalizeNumberInput($value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        $value = str_replace(' ', '', $value);
+
+        if (str_contains($value, ',') && str_contains($value, '.')) {
+            $value = str_replace('.', '', $value);
+            $value = str_replace(',', '.', $value);
+        } elseif (str_contains($value, ',')) {
+            $value = str_replace(',', '.', $value);
+        } elseif (str_contains($value, '.')) {
+            $parts = explode('.', $value);
+
+            if (count($parts) > 2 || (count($parts) === 2 && strlen(end($parts)) === 3 && strlen($parts[0]) <= 3)) {
+                $value = str_replace('.', '', $value);
+            }
+        }
+
+        return $value;
     }
 }
