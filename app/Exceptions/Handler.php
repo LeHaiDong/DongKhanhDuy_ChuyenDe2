@@ -3,6 +3,7 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Session\TokenMismatchException;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -43,6 +44,19 @@ class Handler extends ExceptionHandler
      */
     public function register()
     {
+        $this->renderable(function (TokenMismatchException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Phiên làm việc đã hết hạn. Vui lòng tải lại trang và thực hiện lại.',
+                ], 419);
+            }
+
+            return redirect()
+                ->back()
+                ->withInput($request->except($this->dontFlash))
+                ->with('error', 'Phiên làm việc đã hết hạn. Vui lòng tải lại trang rồi gửi lại thông tin.');
+        });
+
         $this->reportable(function (Throwable $e) {
             //
         });
